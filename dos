@@ -1,0 +1,126 @@
+#!/bin/bash
+
+
+# n       = number of states = sum_states [ 1 ]
+# nmodes  = number of modes  = sum_states [ occupancy ]
+ 
+# e       = array of eigenvalues/energies
+# occ     = array with degeneracies/occupancies for each eigenvalue
+
+# ee      = energy at center of current bin
+# dos     = dos at center of current bin
+# d       = distance between current center and state j
+# anorm   = normalization factor to units of 1/x (where x=cm^-1, eV, etc.)
+# de      = bin size/print frequency
+# sigma   = gaussian broadening of states
+
+
+#  variables: 
+sigma=1.0
+delta=0.2
+col=1
+br_func=1
+
+usage="get-dos : computes dos based on a list of numbers
+
+USAGE 1: ${0##*/} [options] file
+USAGE 2: program | ${0##*/} [options]
+
+options:
+  -s  <float>   define broadening ($sigma)
+  -d  <float>   step size for output ($delta)
+  -u  <float>   upper limit for output ($e1)
+  -l  <float>   lower limit for output ($e2)
+  -n  <n>       set column for data ($col)
+  -m  <n>       set column for occupancy data ($occ_col)
+  -w  <n>       set column for weigths ($w_col)
+  -f  <n>       set broadening function, 1=gaussian, 2=cauchy-lorentz ($br_func)
+  -h            show this help"
+
+while getopts "s:d:u:l:n:m:w:f:h" opt; do
+  case $opt in
+    s ) sigma="$OPTARG";;
+    d ) delta="$OPTARG";;
+    l ) e1="$OPTARG";;
+    u ) e2="$OPTARG";;
+    n ) col="$OPTARG";;
+    m ) occ_col="$OPTARG";;
+    w ) w_col="$OPTARG";;
+    f ) br_func="$OPTARG";;
+    h ) echo -e "$usage"; exit 0;;
+    * ) echo "Unimplented option."; exit 1;;
+  esac
+done
+shift $(($OPTIND-1))
+
+if [ $# -ge 1 ]; then # read from file
+  cat $1
+else                  # read from pipe
+  IFS='\n'
+  while read arg; do
+    echo $arg
+  done
+fi | awk -v sigma="$sigma" -v delta="$delta" -v col="$col" -v e1="$e1" -v e2="$e2" -v occ_col="$occ_col" -v w_col="$w_col" -v br_func="$br_func" 'BEGIN{ 
+  pi=atan2(0,-1)
+  if(br_func==1) {
+    # normalize correctly (Gaussian) : 
+    # \int dx e^{x^2/a} = \sqrt{a*pi}
+    anorm = 1./(sqrt(pi)*sigma)
+    #anorm = 1./sqrt(3.141592*sigma**2)    # <---- pjdosN.x compatibility
+  } else if (br_func==2) {
+   # normalize correctly (Cauchy-Lorentz) : 
+   # norm = \int dx 1/(1+(x/sigma)**2) = pi * sigma
+    anorm = 1/(pi*sigma)
+  } else { print "DOS: Unimplemented broadening function.",br_func > "/dev/stderr"; exit }
+}
+{
+  # read data
+  if(substr($1,1,1)!="#" && NF>=col) {
+    en=$col
+    if(en==en+0) { # check if input is numeric 
+      n++; e[n]=en; 
+      if(w_col) w[n]=$w_col
+      if(occ_col=="") occ[n]=1; else occ[n]=$occ_col; 
+      nmodes+=occ[n]
+      if(emax=="" || e[n]>emax) { emax=e[n];}
+      if(emax=="" || e[n]<emin) { emin=e[n];}
+    }
+  }
+}
+END {
+  #if(e1=="") {if(br_func==1) e1=emin-10*sigma; else e1=emin-100*sigma}
+  #if(e2=="") {if(br_func==1) e2=emax+10*sigma; else e2=emax+100*sigma}
+  e1=emin-10*sigma; 
+  e2=emax+10*sigma; 
+  #e1=emin-3;        e2=emax+3             # <---- pjdosN.x compatibility
+  for(ee=e1;ee<e2+delta;ee+=delta) {
+    dos=0.; dosw=0.
+    for(j=1;j<=n;j++) {
+      if(br_func==1) {
+        # gaussian broadening
+        d=(e[j]-ee)/sigma
+        exp_arg=-d*d
+        if(exp_arg>-100.) {
+          dos+=occ[j]*exp(exp_arg)
+          if(w_col) dosw+=occ[j]*exp(exp_arg)*w[j]
+        }
+      } else if (br_func==2) {
+        # cauchy-lorentz
+        d=(e[j]-ee)/sigma
+        d=d*d
+        if(d<100000000.) {
+          dos+=1/(1+d)
+          if(w_col) dosw+=1/(1+d)*w[j]
+        }
+      }
+    }
+    dos *= anorm; dosw*=anorm
+
+    if(w_col) printf "%12.4f %12.4f %12.4f\n",ee,dos,dosw
+    else printf "%12.4f %12.4f\n",ee,dos
+    integral += dos*delta; integralw += dosw*delta
+  }
+  printf "DOS: integral (should be #modes) = %10.5f approx?= %d\n",integral,nmodes > "/dev/stderr"
+  if(w_col) printf "DOS: weigthed integral = %10.5f\n",integralw > "/dev/stderr"
+}'
+

@@ -1,0 +1,82 @@
+#!/bin/bash
+usage="bin <opts> 
+
+options: 
+  -x <int>    column for data (default=1)
+  -y <int>    column for position (not used by default)
+  -i <int>    from line n
+  -e <int>    every n lines
+  -f <int>    to line n
+  -n <int>    number of bins (default=100)
+  -l <float>  lower limit for x (default: computed from data)
+  -u <float>  upper limit for x (default: computed from data)
+  -d <float>  set step for bins (default: computed from number of bins)
+  -z          print zeros (default=false)
+  -h          show help"
+
+n=100
+x=1
+z=0
+
+while getopts "x:y:i:e:f:n:l:u:d:zh" opt; do
+  case $opt in
+    x ) x="$OPTARG";;
+    y ) y="$OPTARG";;
+    i ) i="$OPTARG";;
+    e ) e="$OPTARG";;
+    f ) f="$OPTARG";;
+    n ) n="$OPTARG";;
+    l ) l="$OPTARG";;
+    u ) u="$OPTARG";;
+    d ) d="$OPTARG";;
+    z ) z=$((1-z));;
+    h ) echo -e "$usage"; exit 0;; 
+    * ) echo "Unimplented option."; exit 1;; 
+  esac
+done
+shift $(($OPTIND-1))
+
+#
+if [ $# -ge 1 ]; then # read from file
+  cat $1
+else                  # read from pipe
+  IFS='\n'
+  while read arg; do
+    echo $arg
+  done
+fi | awk -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$i" -v nstop="$f" -v nbin="$n" -v upper="$u" -v lower="$l" -v dx="$d" -v zeros="$z" 'BEGIN{ if(nbin<1) { print "insufficient bins" > "/dev/stderr"; exit 1}; if(ny=="") ny=nx } {
+    if(NR<nstart && nstart!="") next
+    if(NR>nstop  && nstop!="" ) exit
+    if(nevery>0 && (NR-1)%nevery!=0) next
+    if(NF<nx) { print "HIST: no data in column",nx > "/dev/stderr" ; exit 1 }
+    if(NF<ny) { print "HIST: no data in column",ny > "/dev/stderr" ; exit 1 }
+    if(substr($0,1,1)=="#") next
+    x=$nx; 
+    y=$ny; 
+    # store data
+    data[n]=y
+    array[n++]=x
+    if(x>max || max=="") max=x
+    if(x<min || min=="") min=x
+  } END {
+    if(NR<3) { print "HIST: insufficient data in file" > "/dev/stderr" ; exit 1 }
+    if(lower!="") min=lower
+    if(upper!="") max=upper
+    lx = max-min
+    if(lx==0) { printf "HIST: data has zero range [%s]\n",min > "/dev/stderr" ; exit 1 }
+    if(dx=="") dx = lx/(nbin-1)
+    else nbin = int(lx/dx)+1
+    # make binning
+    for(i=0;i<n;i++) { 
+      ind = int((array[i]-min)/dx)
+      if(ind>=0&&ind<nbin) nitems++
+      bin[ind]++ 
+      sum[ind]+=data[i]
+    }
+    printf "HIST: used %d out of %d entries\n",nitems,n > "/dev/stderr"
+    w=int(-log(dx)/log(10))
+    printf "HIST: made for %d bins in the range [%g, %g], binlength = %g\n",nbin,min,min+nbin*dx,dx > "/dev/stderr"
+    if(nx!=ny) for(j=0;j<nbin;j++) printf "%16.8f %5d %16.8f\n", min+(j+.5)*dx , bin[j]+0, sum[j]+0
+    else       for(j=0;j<nbin;j++) { if(zeros || bin[j]>0) printf "%-*.*f %5d\n", w+6,w+2, min+(j+.5)*dx , bin[j]+0}
+  }'
+
