@@ -2,10 +2,10 @@
 
 
 # n       = number of states = sum_states [ 1 ]
-# nmodes  = number of modes  = sum_states [ occupancy ]
+# nmodes  = number of modes  = sum_states [ weights ]
  
 # e       = array of eigenvalues/energies
-# occ     = array with degeneracies/occupancies for each eigenvalue
+# weight  = array with degeneracies/occupancies for each eigenvalue
 
 # ee      = energy at center of current bin
 # dos     = dos at center of current bin
@@ -32,8 +32,7 @@ options:
   -u  <float>   upper limit for output ($e1)
   -l  <float>   lower limit for output ($e2)
   -n  <n>       set column for data ($col)
-  -m  <n>       set column for occupancy data ($occ_col)
-  -w  <n>       set column for weigths ($w_col)
+  -w  <n>       set column for weigths / occupancy ($w_col)
   -f  <n>       set broadening function, 1=gaussian, 2=cauchy-lorentz ($br_func)
   -h            show this help"
 
@@ -44,7 +43,7 @@ while getopts "s:d:u:l:n:m:w:f:h" opt; do
     l ) e1="$OPTARG";;
     u ) e2="$OPTARG";;
     n ) col="$OPTARG";;
-    m ) occ_col="$OPTARG";;
+    m ) w_col="$OPTARG";;
     w ) w_col="$OPTARG";;
     f ) br_func="$OPTARG";;
     h ) echo -e "$usage"; exit 0;;
@@ -60,7 +59,7 @@ else                  # read from pipe
   while read arg; do
     echo $arg
   done
-fi | awk -v sigma="$sigma" -v delta="$delta" -v col="$col" -v e1="$e1" -v e2="$e2" -v occ_col="$occ_col" -v w_col="$w_col" -v br_func="$br_func" 'BEGIN{ 
+fi | awk -v sigma="$sigma" -v delta="$delta" -v col="$col" -v e1="$e1" -v e2="$e2" -v w_col="$w_col" -v br_func="$br_func" 'BEGIN{ 
   pi=atan2(0,-1)
   if(br_func==1) {
     # normalize correctly (Gaussian) : 
@@ -71,7 +70,7 @@ fi | awk -v sigma="$sigma" -v delta="$delta" -v col="$col" -v e1="$e1" -v e2="$e
    # normalize correctly (Cauchy-Lorentz) : 
    # norm = \int dx 1/(1+(x/sigma)**2) = pi * sigma
     anorm = 1/(pi*sigma)
-  } else { print "DOS: Unimplemented broadening function.",br_func > "/dev/stderr"; exit }
+  } else { print "DOS: unimplemented broadening function.",br_func > "/dev/stderr"; exit }
 }
 {
   # read data
@@ -79,9 +78,8 @@ fi | awk -v sigma="$sigma" -v delta="$delta" -v col="$col" -v e1="$e1" -v e2="$e
     en=$col
     if(en==en+0) { # check if input is numeric 
       n++; e[n]=en; 
-      if(w_col) w[n]=$w_col
-      if(occ_col=="") occ[n]=1; else occ[n]=$occ_col; 
-      nmodes+=occ[n]
+      if(w_col) { w[n]=$w_col; nmodesw+=w[n] }
+      nmodes+=1
       if(emax=="" || e[n]>emax) { emax=e[n];}
       if(emax=="" || e[n]<emin) { emin=e[n];}
     }
@@ -90,8 +88,8 @@ fi | awk -v sigma="$sigma" -v delta="$delta" -v col="$col" -v e1="$e1" -v e2="$e
 END {
   #if(e1=="") {if(br_func==1) e1=emin-10*sigma; else e1=emin-100*sigma}
   #if(e2=="") {if(br_func==1) e2=emax+10*sigma; else e2=emax+100*sigma}
-  e1=emin-10*sigma; 
-  e2=emax+10*sigma; 
+  if(e1=="") e1=emin-10*sigma; 
+  if(e2=="") e2=emax+10*sigma; 
   #e1=emin-3;        e2=emax+3             # <---- pjdosN.x compatibility
   for(ee=e1;ee<e2+delta;ee+=delta) {
     dos=0.; dosw=0.
@@ -101,8 +99,8 @@ END {
         d=(e[j]-ee)/sigma
         exp_arg=-d*d
         if(exp_arg>-100.) {
-          dos+=occ[j]*exp(exp_arg)
-          if(w_col) dosw+=occ[j]*exp(exp_arg)*w[j]
+          dos+=exp(exp_arg)
+          if(w_col) dosw+=exp(exp_arg)*w[j]
         }
       } else if (br_func==2) {
         # cauchy-lorentz
@@ -116,11 +114,11 @@ END {
     }
     dos *= anorm; dosw*=anorm
 
-    if(w_col) printf "%12.4f %12.4f %12.4f\n",ee,dos,dosw
-    else printf "%12.4f %12.4f\n",ee,dos
+    if(w_col) printf "%12.4f %12.4f %12.4f %12.4f %12.4f\n",ee,dos,dosw,integral,integralw
+    else printf "%12.4f %12.4f %12.4f\n",ee,dos,integral
     integral += dos*delta; integralw += dosw*delta
   }
-  printf "DOS: integral (should be #modes) = %10.5f approx?= %d\n",integral,nmodes > "/dev/stderr"
-  if(w_col) printf "DOS: weigthed integral = %10.5f\n",integralw > "/dev/stderr"
+  if(w_col) printf "DOS integral = %10.5f / %10.5f    ?=   %d / %g\n",integral,integralw,nmodes,nmodesw > "/dev/stderr"
+  else printf "DOS: integral = %10.5f approx?= %d\n",integral,nmodes > "/dev/stderr"
 }'
 
