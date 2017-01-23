@@ -118,7 +118,9 @@ END {
     else printf "%12.4f %12.4f %12.4f\n",ee,dos,integral
     integral += dos*delta; integralw += dosw*delta
   }
-  if(w_col) printf "DOS integral = %10.5f / %10.5f    ?=   %d / %g\n",integral,integralw,nmodes,nmodesw > "/dev/stderr"
-  else printf "DOS: integral = %10.5f approx?= %d\n",integral,nmodes > "/dev/stderr"
+  if(w_col) printf "#%11s %12s %12s %12s %12s\n","E","DOS","DOS_W","INT","INT_W" 
+  else printf "#%11s %12s %12s\n","E","DOS","INT" 
+  if(w_col) printf "# DOS integral = %10.5f / %10.5f    ?=   %d / %g\n",integral,integralw,nmodes,nmodesw > "/dev/stderr"
+  else printf "# DOS: integral = %10.5f approx?= %d\n",integral,nmodes > "/dev/stderr"
 }'
 
