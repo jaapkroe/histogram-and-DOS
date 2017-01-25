@@ -1,6 +1,5 @@
 #!/bin/bash
 
-n=100
 x=1
 z=0
 v=0
@@ -13,7 +12,7 @@ options:
   -s <int>    skip n lines
   -e <int>    every n lines
   -f <int>    stop at line number n
-  -n <int>    number of bins (default=$n)
+  -n <int>    number of bins (default=100)
   -l <float>  lower limit for x (default: computed from data)
   -u <float>  upper limit for x (default: computed from data)
   -d <float>  set step for bins (default: computed from number of bins)
@@ -33,7 +32,7 @@ while getopts "x:y:s:e:f:n:l:u:d:zvh" opt; do
     u ) u="$OPTARG";;
     d ) d="$OPTARG";;
     z ) z=$((1-z));;
-    v ) v=$((v+=1));;
+    v ) v=$((v+1));;
     h ) echo -e "$usage"; exit 0;; 
     * ) echo "Unimplented option."; exit 1;; 
   esac
@@ -48,8 +47,14 @@ else                  # read from pipe
   while read arg; do
     echo $arg
   done
-fi | awk -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nstop="$f" -v nbin="$n" -v upper="$u" -v lower="$l" -v dx="$d" -v zeros="$z" -v verbose="$v" 'BEGIN{ if(nbin<1) { print "HIST: insufficient bins",nbin > "/dev/stderr"; error=2; exit}; if(ny=="") ny=nx; n=0 } {
-    if(dx!=""&&nbin!="") { print "HIST: please specify either nbin or dx" > "/dev/stderr" ; error=3; exit }
+fi | awk -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nstop="$f" -v nbin="$n" -v upper="$u" -v lower="$l" -v dx="$d" -v zeros="$z" -v verbose="$v" 'function isnum(x){return(x==x+0)}
+  BEGIN {
+    if(nbin!=""&&nbin<1) { print "HIST: insufficient bins",nbin > "/dev/stderr"; error=2; exit}; 
+    if(ny=="") ny=nx; n=0 
+    if(dx!=""&&nbin!="") { print "HIST: do not specify nbin and dx simultaneously" > "/dev/stderr" ; error=3; exit }
+    if(dx==""&&nbin=="") nbin=100;
+  } 
+  {
     if(NF<nx) { print "HIST: no data in column",nx > "/dev/stderr" ; error=1; exit }
     if(NF<ny) { print "HIST: no data in column",ny > "/dev/stderr" ; error=1; exit }
     # check data
@@ -59,20 +64,23 @@ fi | awk -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nstop="$f" -v n
     if(substr($0,1,1)=="#") next
     # read data
     x=$nx; 
+    if(!isnum(x)) { printf "HIST ERROR: data field is not a number \"%s\"\n",x > "/dev/stderr"; error=1; exit }
     y=$ny; 
+    if(!isnum(y)) { printf "HIST ERROR: weights field is not a number \"%s\"\n",x > "/dev/stderr"; error=1; exit }
     # store data
     data[n]=y
     array[n]=x
     n++
     if(x>max || max=="") max=x
     if(x<min || min=="") min=x
-  } END {
+  } 
+  END {
     if(error>0) exit error
     if(n==0) { print "HIST: insufficient data in file" > "/dev/stderr" ; exit 1 }
     if(lower=="") lower=min
     if(upper=="") upper=max
     lx = upper-lower
-    # compute interval from nbins or nbins from interval
+    # compute dx or nbins from the other depending on the input
     if(dx=="") dx = lx/(nbin-1)
     else nbin = int(lx/dx)+1
     if(lx==0) { printf "HIST: WARNING data has zero range [%s]\n",min > "/dev/stderr"; dx=1 }
@@ -84,7 +92,7 @@ fi | awk -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nstop="$f" -v n
       sum[ind]+=data[i]
     }
     # write output
-    w=int(-log(dx)/log(10)) # print precision determined by interval size
+    w=int(-log(dx)/log(10))+2 # print precision determined by interval size
     if(nx!=ny) for(j=0;j<nbin;j++) { if(zeros || bin[j]>0) printf "%.*f %d %g\n", w,lower+j*dx , bin[j]+0, sum[j]+0 }
     else       for(j=0;j<nbin;j++) { if(zeros || bin[j]>0) printf "%.*f %d\n", w, lower+j*dx , bin[j]+0 }
     if(verbose) printf "HIST: made for %d bins in the range [%g, %g], binlength = %g\n",nbin,lower,lower+nbin*dx,dx > "/dev/stderr"
