@@ -3,6 +3,7 @@
 x=1
 z=0
 v=0
+FS=" "
 
 usage="histogram <options> filename
 
@@ -12,6 +13,7 @@ options:
   -s <int>    skip n lines
   -e <int>    every n lines
   -f <int>    stop at line number n
+  -F <str>    set field separator (default FS=\"$FS\")
   -n <int>    number of bins (default=100)
   -l <float>  lower limit for x (default: computed from data)
   -u <float>  upper limit for x (default: computed from data)
@@ -20,13 +22,14 @@ options:
   -v          increase verbosity
   -h          show help"
 
-while getopts "x:y:s:e:f:n:l:u:d:zvh" opt; do
+while getopts "x:y:s:e:f:F:n:l:u:d:zvh" opt; do
   case $opt in
     x ) x="$OPTARG";;
     y ) y="$OPTARG";;
     s ) s="$OPTARG";;
     e ) e="$OPTARG";;
     f ) f="$OPTARG";;
+    F ) FS="$OPTARG";;
     n ) n="$OPTARG";;
     l ) l="$OPTARG";;
     u ) u="$OPTARG";;
@@ -47,16 +50,18 @@ else                  # read from pipe
   while read arg; do
     echo $arg
   done
-fi | awk -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nstop="$f" -v nbin="$n" -v upper="$u" -v lower="$l" -v dx="$d" -v zeros="$z" -v verbose="$v" 'function isnum(x){return(x==x+0)}
+fi | awk -F "${FS}" -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nstop="$f" -v nbin="$n" -v upper="$u" -v lower="$l" -v dx="$d" -v zeros="$z" -v verbose="$v" 'function isnum(x){return(x==x+0)}
   BEGIN {
+    OFS=FS
+    numeric=true
     if(nbin!=""&&nbin<1) { print "HIST: insufficient bins",nbin > "/dev/stderr"; error=2; exit}; 
-    if(ny=="") ny=nx; n=0 
+    if(ny=="") n=0 
     if(dx!=""&&nbin!="") { print "HIST: do not specify nbin and dx simultaneously" > "/dev/stderr" ; error=3; exit }
     if(dx==""&&nbin=="") nbin=100;
   } 
   {
     if(NF<nx) { print "HIST: no data in column",nx > "/dev/stderr" ; error=1; exit }
-    if(NF<ny) { print "HIST: no data in column",ny > "/dev/stderr" ; error=1; exit }
+    if(ny!="" && NF<ny) { print "HIST: no data in column",ny > "/dev/stderr" ; error=1; exit }
     # check data
     if(NR>nstop  && nstop!="" ) exit
     if(NR<nstart && nstart!="") next
@@ -64,38 +69,51 @@ fi | awk -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nstop="$f" -v n
     if(substr($0,1,1)=="#") next
     # read data
     x=$nx; 
-    if(!isnum(x)) { printf "HIST ERROR: data field is not a number \"%s\"\n",x > "/dev/stderr"; error=1; exit }
-    y=$ny; 
+    if(!isnum(x) && numeric) { printf "HIST WARNING: data field is not numeric\n"; numeric=false }
+    if(ny=="") y=1; else y=$ny;
     if(!isnum(y)) { printf "HIST ERROR: weights field is not a number \"%s\"\n",x > "/dev/stderr"; error=1; exit }
     # store data
-    data[n]=y
-    array[n]=x
-    n++
-    if(x>max || max=="") max=x
-    if(x<min || min=="") min=x
+    if(numeric) {
+      weights[n]=y
+      data[n]=x
+      n++
+      if(x>max || max=="") max=x
+      if(x<min || min=="") min=x
+    } else {
+      data[x]+=y
+    }
   } 
   END {
     if(error>0) exit error
-    if(n==0) { print "HIST: insufficient data in file" > "/dev/stderr" ; exit 1 }
-    if(lower=="") lower=min
-    if(upper=="") upper=max
-    lx = upper-lower
-    # compute dx or nbins from the other depending on the input
-    if(dx=="") dx = lx/(nbin-1)
-    else nbin = int(lx/dx)+1
-    if(lx==0) { printf "HIST: WARNING data has zero range [%s]\n",min > "/dev/stderr"; dx=1 }
-    # make binning
-    for(i=0;i<n;i++) {
-      ind = int((array[i]-lower)/dx)
-      if(ind>=0&&ind<nbin) nitems++
-      bin[ind]++ 
-      sum[ind]+=data[i]
+    if(numeric) {
+      if(n==0) { print "HIST: insufficient data in file" > "/dev/stderr" ; exit 1 }
+      if(lower=="") lower=min
+      if(upper=="") upper=max
+      lx = upper-lower
+      # compute dx or nbins from the other depending on the input
+      if(dx=="") dx = lx/(nbin-1)
+      else nbin = int(lx/dx)+1
+      if(lx==0) { printf "HIST: WARNING data has zero range [%s]\n",min > "/dev/stderr"; dx=1 }
+      # make binning
+      for(i=0;i<n;i++) {
+        ind = int((data[i]-lower)/dx)
+        if(ind>=0&&ind<nbin) nitems++
+        bin[ind]++ 
+        if(ny!="") sum[ind]+=weights[i]
+      }
+    }
+    else {
     }
     # write output
-    w=int(-log(dx)/log(10))+2 # print precision determined by interval size
-    if(nx!=ny) for(j=0;j<nbin;j++) { if(zeros || bin[j]>0) printf "%.*f %d %g\n", w,lower+j*dx , bin[j]+0, sum[j]+0 }
-    else       for(j=0;j<nbin;j++) { if(zeros || bin[j]>0) printf "%.*f %d\n", w, lower+j*dx , bin[j]+0 }
-    if(verbose) printf "HIST: made for %d bins in the range [%g, %g], binlength = %g\n",nbin,lower,lower+nbin*dx,dx > "/dev/stderr"
-    if(nitems!=n) printf "HIST: used %d out of %d entries\n",nitems,n > "/dev/stderr"
+    if(numeric) {
+      w=int(-log(dx)/log(10))+2 # print precision determined by interval size
+      if(ny!="") for(j=0;j<nbin;j++) { if(zeros || bin[j]>0) printf "%.*f %d %g\n", w,lower+j*dx , bin[j]+0, sum[j]+0 }
+      else       for(j=0;j<nbin;j++) { if(zeros || bin[j]>0) printf "%.*f %d\n", w, lower+j*dx , bin[j]+0 }
+      if(verbose) printf "HIST: made for %d bins in the range [%g, %g], binlength = %g\n",nbin,lower,lower+nbin*dx,dx > "/dev/stderr"
+      if(nitems!=n) printf "HIST: used %d out of %d entries\n",nitems,n > "/dev/stderr"
+    } else {
+      for (x in data) 
+        print x,data[x]
+    }
   }'
 
