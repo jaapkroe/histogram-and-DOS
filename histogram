@@ -7,7 +7,7 @@ FS=" "
 
 usage="histogram <options> filename
 
-options: 
+options:
   -x <int>    column for data (default=$x)
   -y <int>    column for weight (not used by default)
   -s <int>    skip n lines
@@ -36,8 +36,8 @@ while getopts "x:y:s:e:f:F:n:l:u:d:zvh" opt; do
     d ) d="$OPTARG";;
     z ) z=$((1-z));;
     v ) v=$((v+1));;
-    h ) echo -e "$usage"; exit 0;; 
-    * ) echo "Unimplented option."; exit 1;; 
+    h ) echo -e "$usage"; exit 0;;
+    * ) echo "Unimplented option."; exit 1;;
   esac
 done
 shift $(($OPTIND-1))
@@ -54,11 +54,11 @@ fi | awk -F "${FS}" -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nsto
   BEGIN {
     OFS=FS
     numeric=true
-    if(nbin!=""&&nbin<1) { print "HIST: insufficient bins",nbin > "/dev/stderr"; error=2; exit}; 
-    if(ny=="") n=0 
+    if(nbin!=""&&nbin<1) { print "HIST: insufficient bins",nbin > "/dev/stderr"; error=2; exit};
+    if(ny=="") n=0
     if(dx!=""&&nbin!="") { print "HIST: do not specify nbin and dx simultaneously" > "/dev/stderr" ; error=3; exit }
     if(dx==""&&nbin=="") nbin=100;
-  } 
+  }
   {
     if(NF<nx) { print "HIST: no data in column",nx > "/dev/stderr" ; error=1; exit }
     if(ny!="" && NF<ny) { print "HIST: no data in column",ny > "/dev/stderr" ; error=1; exit }
@@ -68,7 +68,7 @@ fi | awk -F "${FS}" -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nsto
     if(nevery>0 && (NR-1)%nevery!=0) next
     if(substr($0,1,1)=="#") next
     # read data
-    x=$nx; 
+    x=$nx;
     if(!isnum(x) && numeric) { printf "HIST WARNING: data field is not numeric\n"; numeric=false }
     if(ny=="") y=1; else y=$ny;
     if(!isnum(y)) { printf "HIST ERROR: weights field is not a number \"%s\"\n",x > "/dev/stderr"; error=1; exit }
@@ -82,7 +82,7 @@ fi | awk -F "${FS}" -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nsto
     } else {
       data[x]+=y
     }
-  } 
+  }
   END {
     if(error>0) exit error
     if(numeric) {
@@ -98,7 +98,7 @@ fi | awk -F "${FS}" -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nsto
       for(i=0;i<n;i++) {
         ind = int((data[i]-lower)/dx)
         if(ind>=0&&ind<nbin) nitems++
-        bin[ind]++ 
+        bin[ind]++
         if(ny!="") sum[ind]+=weights[i]
       }
     }
@@ -112,7 +112,7 @@ fi | awk -F "${FS}" -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nsto
       if(verbose) printf "HIST: made for %d bins in the range [%g, %g], binlength = %g\n",nbin,lower,lower+nbin*dx,dx > "/dev/stderr"
       if(nitems!=n) printf "HIST: used %d out of %d entries\n",nitems,n > "/dev/stderr"
     } else {
-      for (x in data) 
+      for (x in data)
         print x,data[x]
     }
   }'
