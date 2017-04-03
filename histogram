@@ -53,7 +53,7 @@ else                  # read from pipe
 fi | awk -F "${FS}" -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nstop="$f" -v nbin="$n" -v upper="$u" -v lower="$l" -v dx="$d" -v zeros="$z" -v verbose="$v" 'function isnum(x){return(x==x+0)}
   BEGIN {
     OFS=FS
-    numeric=true
+    numeric=1
     if(nbin!=""&&nbin<1) { print "HIST: insufficient bins",nbin > "/dev/stderr"; error=2; exit};
     if(ny=="") n=0
     if(dx!=""&&nbin!="") { print "HIST: do not specify nbin and dx simultaneously" > "/dev/stderr" ; error=3; exit }
@@ -69,7 +69,7 @@ fi | awk -F "${FS}" -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nsto
     if(substr($0,1,1)=="#") next
     # read data
     x=$nx;
-    if(!isnum(x) && numeric) { printf "HIST WARNING: data field is not numeric\n"; numeric=false }
+    if(!isnum(x) && numeric) { printf "HIST WARNING: data field is not numeric\n" > "/dev/stderr"; numeric=0 }
     if(ny=="") y=1; else y=$ny;
     if(!isnum(y)) { printf "HIST ERROR: weights field is not a number \"%s\"\n",x > "/dev/stderr"; error=1; exit }
     # store data
