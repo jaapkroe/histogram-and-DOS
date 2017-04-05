@@ -60,14 +60,14 @@ fi | awk -F "${FS}" -v nx="$x" -v ny="$y" -v nevery="$ne" -v nstart="$s" -v nsto
     if(dx==""&&nbin=="") nbin=100;
   }
   {
-    if(NF<nx) { print "HIST: no data in column",nx > "/dev/stderr" ; error=1; exit }
-    if(ny!="" && NF<ny) { print "HIST: no data in column",ny > "/dev/stderr" ; error=1; exit }
     # check data
     if(NR>nstop  && nstop!="" ) exit
     if(NR<nstart && nstart!="") next
     if(nevery>0 && (NR-1)%nevery!=0) next
     if(substr($0,1,1)=="#") next
     # read data
+    if(NF<nx) { print "HIST: no data in column",nx > "/dev/stderr" ; error=1; exit }
+    if(ny!="" && NF<ny) { print "HIST: no data in column",ny > "/dev/stderr" ; error=1; exit }
     x=$nx;
     if(!isnum(x) && numeric) { printf "HIST WARNING: data field is not numeric\n" > "/dev/stderr"; numeric=0 }
     if(ny=="") y=1; else y=$ny;
