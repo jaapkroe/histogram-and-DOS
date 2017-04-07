@@ -46,7 +46,7 @@ shift $(($OPTIND-1))
 if [ $# -ge 1 ]; then # read from file
   cat $1
 else                  # read from pipe
-  IFS='\n'
+  #IFS='\n'
   while read arg; do
     echo $arg
   done
